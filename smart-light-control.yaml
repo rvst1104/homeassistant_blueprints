@@ -12,12 +12,13 @@ blueprint:
         entity:
           domain: binary_sensor
           device_class: motion
-    light_entity:
-      name: Light
-      description: Light to control
+    light_entities:
+      name: Lights
+      description: Lights to control (can select multiple)
       selector:
-        entity:
-          domain: light
+        target:
+          entity:
+            domain: light
     timer_entity:
       name: Timer
       description: Timer helper for auto-off functionality
@@ -26,7 +27,7 @@ blueprint:
           domain: timer
     auto_off_duration:
       name: Auto-off Duration
-      description: Time to wait before turning off the light after motion stops
+      description: Time to wait before turning off the lights after motion stops
       default: "00:02:00"
       selector:
         duration:
@@ -39,12 +40,18 @@ blueprint:
           min: 5
           max: 120
           unit_of_measurement: minutes
-    notification_service:
-      name: Notification Service (Optional)
-      description: Notification service for error alerts
+    enable_notifications:
+      name: Enable Notifications
+      description: Enable error notifications
+      default: false
+      selector:
+        boolean:
+    notification_target:
+      name: Notification Target
+      description: Target for notifications (mobile app, persistent notification, etc.)
       default: ""
       selector:
-        text:
+        target:
     notification_title:
       name: Notification Title
       description: Title for error notifications
@@ -54,7 +61,7 @@ blueprint:
     notification_message:
       name: Notification Message
       description: Message for error notifications
-      default: "Light could not be turned off correctly on first attempt!"
+      default: "Lights could not be turned off correctly on first attempt!"
       selector:
         text:
 
@@ -71,7 +78,7 @@ triggers:
     trigger: state
     to: "off"
   - trigger: state
-    entity_id: !input light_entity
+    entity_id: !input light_entities
     to: "on"
     id: light_on
   - entity_id: !input timer_entity
@@ -88,12 +95,17 @@ actions:
       - conditions:
           - condition: trigger
             id: motion_detected
-          - condition: state
-            entity_id: !input light_entity
-            state: "off"
+          - condition: template
+            value_template: >-
+              {% set lights_off = namespace(count=0) %}
+              {% for entity_id in light_entities %}
+                {% if states(entity_id) == 'off' %}
+                  {% set lights_off.count = lights_off.count + 1 %}
+                {% endif %}
+              {% endfor %}
+              {{ lights_off.count > 0 }}
         sequence:
-          - target:
-              entity_id: !input light_entity
+          - target: !input light_entities
             action: light.turn_on
             data: {}
           - action: timer.cancel
@@ -106,9 +118,15 @@ actions:
               - motion_clear
               - light_on
               - periodic_check
-          - condition: state
-            entity_id: !input light_entity
-            state: "on"
+          - condition: template
+            value_template: >-
+              {% set lights_on = namespace(count=0) %}
+              {% for entity_id in light_entities %}
+                {% if states(entity_id) == 'on' %}
+                  {% set lights_on.count = lights_on.count + 1 %}
+                {% endif %}
+              {% endfor %}
+              {{ lights_on.count > 0 }}
           - condition: state
             entity_id: !input motion_sensor
             state: "off"
@@ -126,26 +144,55 @@ actions:
           - condition: state
             entity_id: !input motion_sensor
             state: "off"
-          - condition: state
-            entity_id: !input light_entity
-            state: "on"
-          - target:
-              entity_id: !input light_entity
+          - condition: template
+            value_template: >-
+              {% set lights_on = namespace(count=0) %}
+              {% for entity_id in light_entities %}
+                {% if states(entity_id) == 'on' %}
+                  {% set lights_on.count = lights_on.count + 1 %}
+                {% endif %}
+              {% endfor %}
+              {{ lights_on.count > 0 }}
+          - target: !input light_entities
             action: light.turn_off
             data: {}
           - delay:
               seconds: 2
-          - condition: state
-            entity_id: !input light_entity
-            state: "on"
+          - condition: template
+            value_template: >-
+              {% set lights_still_on = namespace(count=0) %}
+              {% for entity_id in light_entities %}
+                {% if states(entity_id) == 'on' %}
+                  {% set lights_still_on.count = lights_still_on.count + 1 %}
+                {% endif %}
+              {% endfor %}
+              {{ lights_still_on.count > 0 }}
           - if:
               - condition: template
-                value_template: "{{ notification_service != '' }}"
+                value_template: "{{ enable_notifications }}"
             then:
-              - service: "{{ notification_service }}"
-                data:
-                  title: !input notification_title
-                  message: !input notification_message
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ notification_target != '' }}"
+                    sequence:
+                      - service: notify.mobile_app
+                        target: !input notification_target
+                        data:
+                          title: !input notification_title
+                          message: !input notification_message
+                          data:
+                            priority: high
+                            channel: alerts
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ notification_target == '' }}"
+                    sequence:
+                      - service: persistent_notification.create
+                        data:
+                          title: !input notification_title
+                          message: !input notification_message
+                          notification_id: "light_control_error_{{ now().timestamp() }}"
 
 mode: restart
 max_exceeded: silent
