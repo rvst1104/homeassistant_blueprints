@@ -226,8 +226,8 @@ actions:
                         value_template: "{{ notification_target != '' }}"
                     sequence:
                       - service: notify.mobile_app
-                        target: !input notification_target
                         data:
+                          target: !input notification_target
                           title: !input notification_title
                           message: !input notification_message
                           data:
