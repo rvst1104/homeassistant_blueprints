@@ -295,9 +295,13 @@ actions:
                   seconds: "{{ manual_override_duration.split(':') | map('int') | list | sum }}"
               - condition: template
                 value_template: "{{ manual_override_entity != '' and states(manual_override_entity) == 'on' }}"
-              - service: switch.turn_off
-                target:
-                  entity_id: !input manual_override_entity
+              - if:
+                  - condition: template
+                    value_template: "{{ manual_override_entity != '' }}"
+                then:
+                  - service: switch.turn_off
+                    target:
+                      entity_id: !input manual_override_entity
 
       - conditions:
           - condition: trigger
