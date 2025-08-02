@@ -2,8 +2,7 @@ blueprint:
   name: Smart Motion-Controlled Lighting
   description: >-
     Automatically turns lights on when motion is detected and off when no motion is present.
-    Features include auto-off timer, multiple motion sensor support, manual override switch,
-    periodic safety checks, and optional error notifications.
+    Features include auto-off timer and multiple motion sensor support.
   domain: automation
   input:
     motion_sensors:
@@ -33,52 +32,6 @@ blueprint:
       default: ""
       selector:
         duration:
-    manual_override_entity:
-      name: Manual Override Switch (Optional)
-      description: Leave empty to disable manual override, or select a switch to temporarily disable auto-off
-      default: ""
-      selector:
-        entity:
-          domain: switch
-    manual_override_duration:
-      name: Override Auto-Disable Time (Optional)
-      description: How long to keep manual override active before automatically disabling it (set to 0:00:00 to disable manually)
-      default: "00:30:00"
-      selector:
-        duration:
-    periodic_check_minutes:
-      name: Safety Check Interval (Optional)
-      description: How often to check if lights are stuck on (in minutes, leave empty to disable)
-      default: ""
-      selector:
-        number:
-          min: 5
-          max: 120
-          unit_of_measurement: minutes
-    enable_notifications:
-      name: Enable Error Notifications (Optional)
-      description: Send notifications when lights fail to turn off properly
-      default: false
-      selector:
-        boolean:
-    notification_target:
-      name: Notification Recipient (Optional)
-      description: Who to notify when errors occur (leave empty for persistent notifications)
-      default: ""
-      selector:
-        target:
-    notification_title:
-      name: Error Notification Title (Optional)
-      description: Title for error notification messages
-      default: "Light Control Error!"
-      selector:
-        text:
-    notification_message:
-      name: Error Notification Message (Optional)
-      description: Message to show when lights fail to turn off
-      default: "Lights could not be turned off correctly on first attempt!"
-      selector:
-        text:
 
 alias: "{{ blueprint.name }}"
 description: "{{ blueprint.description }}"
@@ -101,20 +54,6 @@ triggers:
     trigger: state
     to: idle
     from: active
-  - minutes: "{{ periodic_check_minutes }}"
-    id: periodic_check
-    trigger: time_pattern
-    enabled: "{{ periodic_check_minutes != '' }}"
-  - entity_id: !input manual_override_entity
-    id: manual_override_on
-    trigger: state
-    to: "on"
-    enabled: "{{ manual_override_entity != '' }}"
-  - entity_id: !input manual_override_entity
-    id: manual_override_off
-    trigger: state
-    to: "off"
-    enabled: "{{ manual_override_entity != '' }}"
 
 actions:
   - choose:
@@ -161,48 +100,6 @@ actions:
                 {% endif %}
               {% endfor %}
               {{ not any_motion }}
-          - condition: template
-            value_template: >-
-              {% if manual_override_entity != '' %}
-                {{ states(manual_override_entity) == 'off' }}
-              {% else %}
-                {{ true }}
-              {% endif %}
-        sequence:
-          - action: timer.start
-            data:
-              duration: !input auto_off_duration
-            target:
-              entity_id: !input timer_entity
-
-      - conditions:
-          - condition: trigger
-            id: periodic_check
-          - condition: template
-            value_template: >-
-              {% set lights_on = namespace(count=0) %}
-              {% for entity_id in light_entities %}
-                {% if states(entity_id) == 'on' %}
-                  {% set lights_on.count = lights_on.count + 1 %}
-                {% endif %}
-              {% endfor %}
-              {{ lights_on.count > 0 }}
-          - condition: template
-            value_template: >-
-              {% set any_motion = false %}
-              {% for entity_id in motion_sensors %}
-                {% if states(entity_id) == 'on' %}
-                  {% set any_motion = true %}
-                {% endif %}
-              {% endfor %}
-              {{ not any_motion }}
-          - condition: template
-            value_template: >-
-              {% if manual_override_entity != '' %}
-                {{ states(manual_override_entity) == 'off' }}
-              {% else %}
-                {{ true }}
-              {% endif %}
         sequence:
           - action: timer.start
             data:
@@ -232,104 +129,9 @@ actions:
                 {% endif %}
               {% endfor %}
               {{ lights_on.count > 0 }}
-          - condition: template
-            value_template: >-
-              {% if manual_override_entity != '' %}
-                {{ states(manual_override_entity) == 'off' }}
-              {% else %}
-                {{ true }}
-              {% endif %}
           - target: !input light_entities
             action: light.turn_off
             data: {}
-          - delay:
-              seconds: 2
-          - condition: template
-            value_template: >-
-              {% set lights_still_on = namespace(count=0) %}
-              {% for entity_id in light_entities %}
-                {% if states(entity_id) == 'on' %}
-                  {% set lights_still_on.count = lights_still_on.count + 1 %}
-                {% endif %}
-              {% endfor %}
-              {{ lights_still_on.count > 0 }}
-          - if:
-              - condition: template
-                value_template: "{{ enable_notifications }}"
-            then:
-              - choose:
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ notification_target != '' }}"
-                    sequence:
-                      - service: notify.mobile_app
-                        data:
-                          target: !input notification_target
-                          title: !input notification_title
-                          message: !input notification_message
-                          data:
-                            priority: high
-                            channel: alerts
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ notification_target == '' }}"
-                    sequence:
-                      - service: persistent_notification.create
-                        data:
-                          title: !input notification_title
-                          message: !input notification_message
-                          notification_id: "light_control_error_{{ now().timestamp() }}"
-
-      - conditions:
-          - condition: trigger
-            id: manual_override_on
-        sequence:
-          - action: timer.cancel
-            target:
-              entity_id: !input timer_entity
-          - if:
-              - condition: template
-                value_template: "{{ manual_override_duration != '00:00:00' and manual_override_duration != '' }}"
-            then:
-              - delay:
-                  seconds: "{{ manual_override_duration.split(':') | map('int') | list | sum }}"
-              - condition: template
-                value_template: "{{ manual_override_entity != '' and states(manual_override_entity) == 'on' }}"
-              - if:
-                  - condition: template
-                    value_template: "{{ manual_override_entity != '' }}"
-                then:
-                  - service: switch.turn_off
-                    target:
-                      entity_id: !input manual_override_entity
-
-      - conditions:
-          - condition: trigger
-            id: manual_override_off
-        sequence:
-          - condition: template
-            value_template: >-
-              {% set any_motion = false %}
-              {% for entity_id in motion_sensors %}
-                {% if states(entity_id) == 'on' %}
-                  {% set any_motion = true %}
-                {% endif %}
-              {% endfor %}
-              {{ not any_motion }}
-          - condition: template
-            value_template: >-
-              {% set lights_on = namespace(count=0) %}
-              {% for entity_id in light_entities %}
-                {% if states(entity_id) == 'on' %}
-                  {% set lights_on.count = lights_on.count + 1 %}
-                {% endif %}
-              {% endfor %}
-              {{ lights_on.count > 0 }}
-          - action: timer.start
-            data:
-              duration: !input auto_off_duration
-            target:
-              entity_id: !input timer_entity
 
 mode: restart
 max_exceeded: silent
