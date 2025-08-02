@@ -1,54 +1,54 @@
 blueprint:
   name: Smart Motion-Controlled Lighting
   description: >-
-    Automatic lighting with motion detection, configurable auto-off timer,  
-    and safety backup checks. Includes periodic monitoring and failure notifications.
-    Supports multiple motion sensors and manual override functionality.
+    Automatically turns lights on when motion is detected and off when no motion is present.
+    Features include auto-off timer, multiple motion sensor support, manual override switch,
+    periodic safety checks, and optional error notifications.
   domain: automation
   input:
     motion_sensors:
       name: Motion Sensors
-      description: Motion sensors to trigger the automation (can select multiple)
+      description: Select one or more motion sensors to control the lights
       selector:
         target:
           entity:
             domain: binary_sensor
             device_class: motion
     light_entities:
-      name: Lights
-      description: Lights to control (can select multiple)
+      name: Lights to Control
+      description: Select the lights you want to automatically control
       selector:
         target:
           entity:
             domain: light
     timer_entity:
-      name: Timer
-      description: Timer helper for auto-off functionality
+      name: Timer Helper
+      description: Select a timer helper to manage the auto-off delay
       selector:
         entity:
           domain: timer
     auto_off_duration:
-      name: Auto-off Duration
-      description: Time to wait before turning off the lights after motion stops
+      name: Auto-Off Delay
+      description: How long to wait before turning off lights after motion stops (e.g., 2 minutes)
       default: "00:02:00"
       selector:
         duration:
     manual_override_entity:
-      name: Manual Override Switch
-      description: Switch to temporarily disable auto-off functionality
+      name: Manual Override Switch (Optional)
+      description: Leave empty to disable manual override, or select a switch to temporarily disable auto-off
       default: ""
       selector:
         entity:
           domain: switch
     manual_override_duration:
-      name: Manual Override Duration
-      description: How long to keep manual override active (0 = until manually disabled)
+      name: Override Auto-Disable Time
+      description: How long to keep manual override active before automatically disabling it (set to 0:00:00 to disable manually)
       default: "00:30:00"
       selector:
         duration:
     periodic_check_minutes:
-      name: Periodic Check Interval
-      description: Minutes between periodic safety checks
+      name: Safety Check Interval
+      description: How often to check if lights are stuck on (in minutes)
       default: 30
       selector:
         number:
@@ -56,26 +56,26 @@ blueprint:
           max: 120
           unit_of_measurement: minutes
     enable_notifications:
-      name: Enable Notifications
-      description: Enable error notifications
+      name: Enable Error Notifications
+      description: Send notifications when lights fail to turn off properly
       default: false
       selector:
         boolean:
     notification_target:
-      name: Notification Target
-      description: Target for notifications (mobile app, persistent notification, etc.)
+      name: Notification Recipient
+      description: Who to notify when errors occur (leave empty for persistent notifications)
       default: ""
       selector:
         target:
     notification_title:
-      name: Notification Title
-      description: Title for error notifications
+      name: Error Notification Title
+      description: Title for error notification messages
       default: "Light Control Error!"
       selector:
         text:
     notification_message:
-      name: Notification Message
-      description: Message for error notifications
+      name: Error Notification Message
+      description: Message to show when lights fail to turn off
       default: "Lights could not be turned off correctly on first attempt!"
       selector:
         text:
